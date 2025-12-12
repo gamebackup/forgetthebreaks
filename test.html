@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en-us">
   <head>
+    <base href="https://cdn.jsdelivr.net/gh/gamebackup/forgetthebreaks@main/"> 
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <title>Unity Web Player | Forget The Brakes!</title>
@@ -18,108 +19,94 @@
       </div>
       <div id="unity-warning"> </div>
       <div id="unity-footer">
+        <!-- <div id="unity-logo-title-footer"></div> -->
         <div id="unity-fullscreen-button"></div>
         <div id="unity-build-title">Go fullscreen ➡️</div>
       </div>
     </div>
-    <script>
-      var canvas = document.querySelector("#unity-canvas");
+   <script>
+    var canvas = document.querySelector("#unity-canvas");
 
-      // Shows a temporary message banner/ribbon for a few seconds, or
-      // a permanent error message on top of the canvas if type=='error'.
-      // If type=='warning', a yellow highlight color is used.
-      // Modify or remove this function to customize the visually presented
-      // way that non-critical warnings and error messages are presented to the
-      // user.
-      function unityShowBanner(msg, type) {
+    // Shows a temporary message banner/ribbon for a few seconds, or
+    // a permanent error message on top of the canvas if type=='error'.
+    // If type=='warning', a yellow highlight color is used.
+    // Modify or remove this function to customize the visually presented
+    // way that non-critical warnings and error messages are presented to the
+    // user.
+    function unityShowBanner(msg, type) {
         var warningBanner = document.querySelector("#unity-warning");
         function updateBannerVisibility() {
-          warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
+            warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
         }
         var div = document.createElement('div');
         div.innerHTML = msg;
         warningBanner.appendChild(div);
         if (type == 'error') div.style = 'background: red; padding: 10px;';
         else {
-          if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
-          setTimeout(function() {
-            warningBanner.removeChild(div);
-            updateBannerVisibility();
-          }, 5000);
+            if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
+            setTimeout(function() {
+                warningBanner.removeChild(div);
+                updateBannerVisibility();
+            }, 5000);
         }
         updateBannerVisibility();
-      }
+    }
 
-      // --- NEW FUNCTION: WASM Reassembly Logic ---
-      /**
-       * Fetches and reassembles the split WASM file parts.
-       * @param {string} part1Url The URL of the first part.
-       * @param {string} part2Url The URL of the second part.
-       * @returns {Promise<ArrayBuffer>} The combined ArrayBuffer.
-       */
-      async function reassembleWasm(part1Url, part2Url) {
-          try {
-              console.log("Fetching WASM part 1 from: " + part1Url);
-              const response1 = await fetch(part1Url);
-              const buffer1 = await response1.arrayBuffer();
+    // --- CRITICAL NEW FUNCTION: WASM Reassembly Logic with Blob URL ---
+    /**
+     * Fetches and reassembles the split WASM file parts, and creates a Blob URL.
+     * @param {string} part1Url The URL of the first part.
+     * @param {string} part2Url The URL of the second part.
+     * @returns {Promise<string>} A Blob URL pointing to the combined WASM data.
+     */
+    async function reassembleWasm(part1Url, part2Url) {
+        try {
+            console.log("Fetching WASM part 1 from: " + part1Url);
+            const response1 = await fetch(part1Url);
+            const buffer1 = await response1.arrayBuffer();
 
-              console.log("Fetching WASM part 2 from: " + part2Url);
-              const response2 = await fetch(part2Url);
-              const buffer2 = await response2.arrayBuffer();
+            console.log("Fetching WASM part 2 from: " + part2Url);
+            const response2 = await fetch(part2Url);
+            const buffer2 = await response2.arrayBuffer();
 
-              console.log("Combining buffers...");
-              // Create a Uint8Array view of the two buffers
-              const combinedSize = buffer1.byteLength + buffer2.byteLength;
-              const combinedArray = new Uint8Array(combinedSize);
-              
-              // 1. Place Part 1 (starts at index 0)
-              combinedArray.set(new Uint8Array(buffer1), 0);
-              
-              // 2. Place Part 2 (starts after Part 1 ends)
-              combinedArray.set(new Uint8Array(buffer2), buffer1.byteLength);
+            const combinedSize = buffer1.byteLength + buffer2.byteLength;
+            const combinedArray = new Uint8Array(combinedSize);
+            combinedArray.set(new Uint8Array(buffer1), 0);
+            combinedArray.set(new Uint8Array(buffer2), buffer1.byteLength);
 
-              console.log("Reassembly successful. Total size:", combinedSize);
-              return combinedArray.buffer; // Return the final ArrayBuffer
-          } catch (e) {
-              console.error("WASM Reassembly failed:", e);
-              // Show an error to the user if fetching or combining fails
-              unityShowBanner("Error downloading or assembling game data. Check console for details.", 'error');
-              throw e;
-          }
-      }
-      // --- END NEW FUNCTION ---
+            // 1. Create a Blob with the combined data and the correct MIME type.
+            const wasmBlob = new Blob([combinedArray.buffer], { type: 'application/wasm' });
+            
+            // 2. Create a temporary URL for the Blob. This is the new codeUrl.
+            const wasmBlobUrl = URL.createObjectURL(wasmBlob);
+            
+            return wasmBlobUrl; 
+        } catch (e) {
+            console.error("WASM Reassembly failed:", e);
+            unityShowBanner("Error downloading or assembling game data. Check console for details.", 'error');
+            throw e;
+        }
+    }
+    // --- END NEW FUNCTION ---
 
-      var buildUrl = "Build";
-      var loaderUrl = buildUrl + "/WebGL.loader.js";
-      var config = {
+    // --- MODIFIED: Use the absolute CDN path for all Build files ---
+    var buildUrl = "https://cdn.jsdelivr.net/gh/gamebackup/forgetthebreaks@main/Build";
+    var loaderUrl = buildUrl + "/WebGL.loader.js";
+    var config = {
         arguments: [],
         dataUrl: buildUrl + "/WebGL.data.gz",
         frameworkUrl: buildUrl + "/WebGL.framework.js.gz",
-        // codeUrl: buildUrl + "/WebGL.wasm.gz",  <-- REMOVED: We are manually loading this now
+        // codeUrl will be set later to the Blob URL
         streamingAssetsUrl: "StreamingAssets",
         companyName: "ferran.games",
         productName: "Forget The Brakes!",
         productVersion: "2.2",
         showBanner: unityShowBanner,
-      };
+    };
 
-      // By default, Unity keeps WebGL canvas render target size matched with
-      // the DOM size of the canvas element (scaled by window.devicePixelRatio)
-      // Set this to false if you want to decouple this synchronization from
-      // happening inside the engine, and you would instead like to size up
-      // the canvas DOM size and WebGL render target sizes yourself.
-      // config.matchWebGLToCanvasSize = false;
+    // ... (rest of the mobile/desktop setup remains the same)
 
-      // If you would like all file writes inside Unity Application.persistentDataPath
-      // directory to automatically persist so that the contents are remembered when
-      // the user revisits the site the next time, uncomment the following line:
-      // config.autoSyncPersistentDataPath = true;
-      // This autosyncing is currently not the default behavior to avoid regressing
-      // existing user projects that might rely on the earlier manual
-      // JS_FileSystem_Sync() behavior, but in future Unity version, this will be
-      // expected to change.
-
-      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
         // Mobile device style: fill the whole browser client area with the game canvas:
 
         var meta = document.createElement('meta');
@@ -134,32 +121,32 @@
         // config.devicePixelRatio = 1;
 
 
-      } else {
+    } else {
         // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
         canvas.style.width = "960px";
         canvas.style.height = "600px";
-      }
+    }
 
-      document.querySelector("#unity-loading-bar").style.display = "block";
+    document.querySelector("#unity-loading-bar").style.display = "block";
 
-      var script = document.createElement("script");
-      script.src = loaderUrl;
-      // --- MODIFIED: The main loading handler is now asynchronous (async) ---
-      script.onload = async () => {
+    var script = document.createElement("script");
+    script.src = loaderUrl;
+    // --- MODIFIED: The main loading handler is now asynchronous (async) ---
+    script.onload = async () => {
         try {
-            // 1. Reassemble the WASM file parts first
-            const wasmBinaryData = await reassembleWasm(
+            // 1. Reassemble and get the Blob URL
+            const wasmBlobUrl = await reassembleWasm(
                 buildUrl + "/WebGL.wasm.gz.part1",
                 buildUrl + "/WebGL.wasm.gz.part2"
             );
 
-            // 2. Start Unity Instance
+            // 2. Set the config.codeUrl to the Blob URL
+            config.codeUrl = wasmBlobUrl;
+
+            // 3. Start Unity Instance (It will fetch from the Blob URL with correct MIME type)
             createUnityInstance(canvas, config, (progress) => {
                 document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
             }).then((unityInstance) => {
-                // 3. CRITICAL STEP: Inject the reassembled binary data into the Unity module
-                unityInstance.Module.wasmBinary = wasmBinaryData;
-
                 document.querySelector("#unity-loading-bar").style.display = "none";
                 document.querySelector("#unity-fullscreen-button").onclick = () => {
                     unityInstance.SetFullscreen(1);
@@ -168,14 +155,14 @@
                 alert("Unity Initialization Failed: " + message);
             });
         } catch (e) {
-            // Error handling for initial fetching/reassembly is done inside reassembleWasm
+            // Error handling for initial fetching/reassembly
             console.log("Loader process stopped due to reassembly error.");
         }
-      };
-      // --- END MODIFIED LOADING HANDLER ---
+    };
+    // --- END MODIFIED LOADING HANDLER ---
 
-      document.body.appendChild(script);
+    document.body.appendChild(script);
 
-    </script>
+</script>
   </body>
 </html>
